@@ -20,10 +20,16 @@ const std::vector<const char*> validationLayers = {
   "VK_LAYER_KHRONOS_validation"
 };
 
+#ifdef __APPLE__
 const std::vector<const char*> deviceExtensions = {
   VK_KHR_SWAPCHAIN_EXTENSION_NAME,
   VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME
 };
+#else
+const std::vector<const char*> deviceExtensions = {
+  VK_KHR_SWAPCHAIN_EXTENSION_NAME
+};
+#endif
 
 #ifdef NDEBUG
   const bool enableValidationLayers = false;
@@ -138,8 +144,10 @@ class HelloTriangleApplication {
           requiredExtensions.emplace_back(glfwExtensions[i]);
       }
       
+#ifdef __APPLE__
       requiredExtensions.emplace_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
       requiredExtensions.emplace_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+#endif
 
       createInfo.enabledExtensionCount = requiredExtensions.size();
       createInfo.ppEnabledExtensionNames = requiredExtensions.data();
