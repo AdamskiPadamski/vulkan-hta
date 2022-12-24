@@ -1,4 +1,6 @@
 #define GLFW_INCLUDE_VULKAN
+#define VK_ENABLE_BETA_EXTENSIONS
+
 #include <GLFW/glfw3.h>
 
 #include <vector>
@@ -19,7 +21,8 @@ const std::vector<const char*> validationLayers = {
 };
 
 const std::vector<const char*> deviceExtensions = {
-  VK_KHR_SWAPCHAIN_EXTENSION_NAME
+  VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+  VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME
 };
 
 #ifdef NDEBUG
@@ -122,14 +125,29 @@ class HelloTriangleApplication {
       VkInstanceCreateInfo createInfo{};
       createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
       createInfo.pApplicationInfo = &appInfo;
+      createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
 
       uint32_t glfwExtensionCount = 0;
       const char** glfwExtensions;
 
       glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
-      createInfo.enabledExtensionCount = glfwExtensionCount;
-      createInfo.ppEnabledExtensionNames = glfwExtensions;
+      std::vector<const char*> requiredExtensions;
+
+      for(uint32_t i = 0; i < glfwExtensionCount; i++) {
+          requiredExtensions.emplace_back(glfwExtensions[i]);
+      }
+      
+      requiredExtensions.emplace_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+      requiredExtensions.emplace_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+
+      createInfo.enabledExtensionCount = requiredExtensions.size();
+      createInfo.ppEnabledExtensionNames = requiredExtensions.data();
+
+      std::cout << glfwExtensionCount + 1 << std::endl;
+      for (int i = 0; i < glfwExtensionCount + 1; i++) {
+        std::cout << glfwExtensions[i] << std::endl;
+      }
 
       if (enableValidationLayers) {
         createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
@@ -282,9 +300,12 @@ class HelloTriangleApplication {
     }
 
     void createSurface() {
+      std::cout << "Hello" << std::endl;
+      glfwCreateWindowSurface(instance, window, nullptr, &surface);
       if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS) {
         throw std::runtime_error("failed to create window surface!");
       }
+      std::cout << "World" << std::endl;
     }
 
     bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
