@@ -144,11 +144,6 @@ class HelloTriangleApplication {
       createInfo.enabledExtensionCount = requiredExtensions.size();
       createInfo.ppEnabledExtensionNames = requiredExtensions.data();
 
-      std::cout << glfwExtensionCount + 1 << std::endl;
-      for (int i = 0; i < glfwExtensionCount + 1; i++) {
-        std::cout << glfwExtensions[i] << std::endl;
-      }
-
       if (enableValidationLayers) {
         createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
         createInfo.ppEnabledLayerNames = validationLayers.data();
@@ -300,12 +295,9 @@ class HelloTriangleApplication {
     }
 
     void createSurface() {
-      std::cout << "Hello" << std::endl;
-      glfwCreateWindowSurface(instance, window, nullptr, &surface);
       if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS) {
         throw std::runtime_error("failed to create window surface!");
       }
-      std::cout << "World" << std::endl;
     }
 
     bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
