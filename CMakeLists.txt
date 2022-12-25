@@ -9,7 +9,7 @@ endif()
 
 set(CMAKE_CXX_STANDARD 17)
 
-add_executable(${PROJECT_NAME} main.cpp)
+add_executable(${PROJECT_NAME} src/main.cpp)
 
 find_package(glfw3 REQUIRED)
 find_package(Vulkan 1.3.236.0 REQUIRED)
