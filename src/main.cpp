@@ -114,6 +114,8 @@ class HelloTriangleApplication {
         glfwPollEvents();
         drawFrame();
       }
+
+      vkDeviceWaitIdle(device);
     }
 
     void cleanup() {
