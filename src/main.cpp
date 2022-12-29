@@ -1,9 +1,12 @@
+#define GLM_FORCE_RADIANS
 #define GLFW_INCLUDE_VULKAN
 #define VK_ENABLE_BETA_EXTENSIONS
 
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
+#include <chrono>
 #include <array>
 #include <vector>
 #include <iostream>
@@ -99,6 +102,12 @@ struct SwapChainSupportDetails {
   std::vector<VkPresentModeKHR> presentModes;
 };
 
+struct UniformBufferObject {
+  glm::mat4 model;
+  glm::mat4 view;
+  glm::mat4 proj;
+};
+
 class HelloTriangleApplication {
   public:
     void run() {
@@ -122,6 +131,7 @@ class HelloTriangleApplication {
     VkExtent2D swapChainExtent;
     std::vector<VkImageView> swapChainImageViews;
     VkRenderPass renderPass;
+    VkDescriptorSetLayout descriptorSetLayout;
     VkPipelineLayout pipelineLayout;
     VkPipeline pipeline;
     std::vector<VkFramebuffer> swapChainFramebuffers;
@@ -136,6 +146,9 @@ class HelloTriangleApplication {
     VkDeviceMemory vertexBufferMemory;
     VkBuffer indexBuffer;
     VkDeviceMemory indexBufferMemory;
+    std::vector<VkBuffer> uniformBuffers;
+    std::vector<VkDeviceMemory> uniformBuffersMemory;
+    std::vector<void*> uniformBuffersMapped;
 
     void initWindow() {
       glfwInit();
@@ -160,11 +173,13 @@ class HelloTriangleApplication {
       createSwapChain();
       createImageViews();
       createRenderPass();
+      createDescriptorSetLayout();
       createGraphicsPipeline();
       createFramebuffers();
       createCommandPool();
       createVertexBuffers();
       createIndexBuffer();
+      createUniformBuffers();
       createCommandBuffers();
       createSyncObjects();
     }
@@ -180,6 +195,13 @@ class HelloTriangleApplication {
 
     void cleanup() {
       cleanupSwapChain();
+
+      for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        vkDestroyBuffer(device, uniformBuffers[i], nullptr);
+        vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
+      }
+
+      vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 
       vkDestroyBuffer(device, indexBuffer, nullptr);
       vkFreeMemory(device, indexBufferMemory, nullptr);
@@ -658,6 +680,8 @@ class HelloTriangleApplication {
 
       VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
       pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+      pipelineLayoutInfo.setLayoutCount = 1;
+      pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
 
       if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
         throw std::runtime_error("failed to create pipeline layout!");
@@ -845,6 +869,8 @@ class HelloTriangleApplication {
       vkResetFences(device, 1, &inFlightFences[currentFrame]);
       vkResetCommandBuffer(commandBuffers[currentFrame], 0);
       recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
+
+      updateUniformBuffer(currentFrame);
 
       VkSubmitInfo submitInfo{};
       submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1089,6 +1115,53 @@ class HelloTriangleApplication {
 
       vkDestroyBuffer(device, stagingBuffer, nullptr);
       vkFreeMemory(device, stagingBufferMemory, nullptr);
+    }
+
+    void createDescriptorSetLayout() {
+      VkDescriptorSetLayoutBinding uboLayoutBinding{};
+      uboLayoutBinding.binding = 0;
+      uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+      uboLayoutBinding.descriptorCount = 1;
+      uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+      VkDescriptorSetLayoutCreateInfo layoutInfo{};
+      layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+      layoutInfo.bindingCount = 1;
+      layoutInfo.pBindings = &uboLayoutBinding;
+
+      if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create descriptor set layout!");
+      }
+    }
+
+    void createUniformBuffers() {
+      VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+
+      uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+      uniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+      uniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+      for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i], uniformBuffersMemory[i]);
+
+        vkMapMemory(device, uniformBuffersMemory[i], 0, bufferSize, 0, &uniformBuffersMapped[i]);
+      };
+    }
+
+    void updateUniformBuffer(uint32_t currentFrame) {
+      static auto startTime = std::chrono::high_resolution_clock::now();
+
+      auto currentTime = std::chrono::high_resolution_clock::now();
+      float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+
+      UniformBufferObject ubo{};
+      ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+      ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+      ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / static_cast<float>(swapChainExtent.height), 0.1f, 10.0f);
+
+      ubo.proj[1][1] *= -1;
+
+      memcpy(uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
     }
 };
 
