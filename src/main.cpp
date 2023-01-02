@@ -1,13 +1,17 @@
+#define TINYOBJLOADER_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
+#define GLM_ENABLE_EXPERIMENTAL
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLFW_INCLUDE_VULKAN
 #define VK_ENABLE_BETA_EXTENSIONS
 
+#include <tiny_obj_loader.h>
 #include <stb_image.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/hash.hpp>
 
 #include <chrono>
 #include <array>
@@ -21,9 +25,13 @@
 #include <limits>
 #include <algorithm>
 #include <fstream>
+#include <unordered_map>
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
+
+const std::string MODEL_PATH = "models/viking_room.obj";
+const std::string TEXTURE_PATH = "textures/viking_room.png";
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -83,24 +91,21 @@ struct Vertex {
 
     return attributeDescriptions;
   }
+
+  bool operator==(const Vertex& other) const {
+    return pos == other.pos && color == other.color && texCoord == other.texCoord;
+  }
 };
 
-const std::vector<Vertex> vertices = {
-  {{ -0.5f, -0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 1.0f, 0.0f }},
-  {{ 0.5f, -0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f }},
-  {{ 0.5f, 0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f }},
-  {{ -0.5f, 0.5f, 0.0f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f }},
-
-  {{ -0.5f, -0.5f, -0.5f }, { 1.0f, 0.0f, 0.0f }, { 1.0f, 0.0f }},
-  {{ 0.5f, -0.5f, -0.5f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f }},
-  {{ 0.5f, 0.5f, -0.5f }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f }},
-  {{ -0.5f, 0.5f, -0.5f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f }}
-};
-
-const std::vector<uint16_t> indices = {
-  0, 1, 2, 2, 3, 0,
-  4, 5, 6, 6, 7, 4
-};
+namespace std {
+  template<> struct hash<Vertex> {
+    size_t operator()(Vertex const& vertex) const {
+      return ((hash<glm::vec3>()(vertex.pos) ^
+             (hash<glm::vec3>()(vertex.color) << 1)) ^
+             (hash<glm::vec2>()(vertex.texCoord) << 1));
+    };
+  };
+}
 
 struct QueueFamilyIndices {
   std::optional<uint32_t> graphicsFamily;
@@ -157,6 +162,8 @@ class HelloTriangleApplication {
     std::vector<VkFence> inFlightFences;
     uint32_t currentFrame = 0;
     bool framebufferResized;
+    std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
     VkBuffer vertexBuffer;
     VkDeviceMemory vertexBufferMemory;
     VkBuffer indexBuffer;
@@ -205,6 +212,7 @@ class HelloTriangleApplication {
       createTextureImage();
       createTextureImageView();
       createTextureSampler();
+      loadModel();
       createVertexBuffers();
       createIndexBuffer();
       createUniformBuffers();
@@ -882,7 +890,7 @@ class HelloTriangleApplication {
       VkDeviceSize offsets[] = { 0 };
       vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
 
-      vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+      vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
       VkViewport viewport{};
       viewport.x = 0.0f;
@@ -1280,7 +1288,7 @@ class HelloTriangleApplication {
       int texHeight;
       int texChannels;
 
-      stbi_uc* pixels = stbi_load("textures/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+      stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
       VkDeviceSize imageSize = texWidth * texHeight * 4;
 
       if (!pixels) {
@@ -1524,6 +1532,53 @@ class HelloTriangleApplication {
 
     bool hasStencilComponent(VkFormat format) {
       return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
+    }
+
+    void loadModel() {
+      tinyobj::attrib_t attrib;
+      std::vector<tinyobj::shape_t> shapes;
+      std::vector<tinyobj::material_t> materials;
+      std::string warn;
+      std::string error;
+
+      if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &error, MODEL_PATH.c_str())) {
+        throw std::runtime_error(warn + error);
+      }
+
+      std::unordered_map<Vertex, uint32_t> uniqueVertices{};
+
+      uint32_t totalVertices = 0;
+
+      for (const auto& shape : shapes) {
+        for (const auto& index : shape.mesh.indices) {
+          Vertex vertex{};
+          
+          vertex.pos = {
+            attrib.vertices[3 * index.vertex_index + 0],
+            attrib.vertices[3 * index.vertex_index + 1],
+            attrib.vertices[3 * index.vertex_index + 2]
+          };
+
+          vertex.texCoord = {
+            attrib.texcoords[2 * index.texcoord_index + 0],
+            1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
+          };
+
+          vertex.color = { 1.0f, 1.0f, 1.0f };
+
+          totalVertices += 1;
+
+          if (uniqueVertices.count(vertex) == 0) {
+            uniqueVertices[vertex] = static_cast<uint32_t>(vertices.size());
+            vertices.push_back(vertex);
+          }
+          
+          indices.push_back(uniqueVertices[vertex]);
+        }
+      }
+
+      std::cout << totalVertices << std::endl;
+      std::cout << vertices.size() << std::endl;
     }
 };
 
