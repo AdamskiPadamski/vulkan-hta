@@ -1576,9 +1576,6 @@ class HelloTriangleApplication {
           indices.push_back(uniqueVertices[vertex]);
         }
       }
-
-      std::cout << totalVertices << std::endl;
-      std::cout << vertices.size() << std::endl;
     }
 };
 
