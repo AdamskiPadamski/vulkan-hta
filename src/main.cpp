@@ -1547,8 +1547,6 @@ class HelloTriangleApplication {
 
       std::unordered_map<Vertex, uint32_t> uniqueVertices{};
 
-      uint32_t totalVertices = 0;
-
       for (const auto& shape : shapes) {
         for (const auto& index : shape.mesh.indices) {
           Vertex vertex{};
@@ -1565,8 +1563,6 @@ class HelloTriangleApplication {
           };
 
           vertex.color = { 1.0f, 1.0f, 1.0f };
-
-          totalVertices += 1;
 
           if (uniqueVertices.count(vertex) == 0) {
             uniqueVertices[vertex] = static_cast<uint32_t>(vertices.size());
